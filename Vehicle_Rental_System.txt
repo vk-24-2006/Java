@@ -1,0 +1,856 @@
+DBConnection.java
+
+package vrs;
+import java.sql.*;
+
+public class DbConnection {
+    public static Connection getConnection() {
+        try {
+            return DriverManager.getConnection(
+                "jdbc:mysql://localhost:3306/vehiclerental","root","root");
+        } catch(Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+}
+
+Login Page.java
+
+package vrs;
+import javax.swing.*;
+import java.awt.event.*;
+
+public class LoginPage extends JFrame {
+    JTextField txtUser;
+    JPasswordField txtPass;
+    JButton btnLogin;
+
+    public LoginPage() {
+        setTitle("Admin Login");
+        setSize(300,200);
+        setLayout(null);
+        setDefaultCloseOperation(EXIT_ON_CLOSE);
+
+        JLabel lblUser = new JLabel("Username:");
+        lblUser.setBounds(20,20,80,25);
+        add(lblUser);
+
+        txtUser = new JTextField();
+        txtUser.setBounds(120,20,150,25);
+        add(txtUser);
+
+        JLabel lblPass = new JLabel("Password:");
+        lblPass.setBounds(20,60,80,25);
+        add(lblPass);
+
+        txtPass = new JPasswordField();
+        txtPass.setBounds(120,60,150,25);
+        add(txtPass);
+
+        btnLogin = new JButton("Login");
+        btnLogin.setBounds(100,110,100,30);
+        add(btnLogin);
+
+        btnLogin.addActionListener(e -> {
+            String user = txtUser.getText();
+            String pass = new String(txtPass.getPassword());
+            if(user.equals("admin") && pass.equals("admin123")) {
+                new Dashboard();
+                dispose();
+            } else {
+                JOptionPane.showMessageDialog(this, "Invalid credentials");
+            }
+        });
+
+        setVisible(true);
+    }
+
+    public static void main(String[] args) {
+        new LoginPage();
+    }
+}
+
+
+Dashboard.java
+
+package vrs;
+import javax.swing.*;
+import java.awt.*;
+
+public class Dashboard extends JFrame {
+    public Dashboard() {
+        setTitle("Vehicle Rental Dashboard");
+        setSize(400,500);
+        setLayout(new GridLayout(10,1,10,10));
+        setDefaultCloseOperation(EXIT_ON_CLOSE);
+
+        JButton btnAddVehicle = new JButton("Add Vehicle");
+        JButton btnViewVehicles = new JButton("View Vehicles");
+        JButton btnAddCustomer = new JButton("Add Customer");
+        JButton btnViewCustomers = new JButton("View Customers");
+        JButton btnRentVehicle = new JButton("Rent Vehicle");
+        JButton btnReturnVehicle = new JButton("Return Vehicle");
+        JButton btnPayments = new JButton("Payments");
+        JButton btnLogout = new JButton("Logout");
+
+        // Add buttons to frame
+        add(btnAddVehicle); 
+        add(btnViewVehicles); 
+        add(btnAddCustomer); 
+        add(btnViewCustomers);
+        add(btnRentVehicle); 
+        add(btnReturnVehicle); 
+        add(btnPayments); 
+        add(btnLogout);
+
+        // Button actions (make sure class names exist!)
+        btnAddVehicle.addActionListener(e -> new AddVehicle());
+        btnViewVehicles.addActionListener(e -> new ViewVehiclesPage());
+        btnAddCustomer.addActionListener(e -> new AddCustomerPage());
+        btnViewCustomers.addActionListener(e -> new ViewCustomerPage());
+        btnRentVehicle.addActionListener(e -> new RentVehiclePage());
+        btnReturnVehicle.addActionListener(e -> new ReturnVehiclePage());
+        btnPayments.addActionListener(e -> new PaymentsPage());   // ✅ fixed
+        btnLogout.addActionListener(e -> { new LoginPage(); dispose(); });
+
+        setVisible(true);
+    }
+}
+
+AddVehicle.java
+
+package vrs;
+
+import javax.swing.*;
+import java.awt.*;
+import java.sql.*;
+
+public class AddVehicle extends JFrame {
+    JTextField txtName, txtType, txtRent;
+    JCheckBox chkAvailable;
+    JButton btnAdd;
+
+    public AddVehicle() {
+        setTitle("Add Vehicle");
+        setSize(400,300);
+        setLayout(new GridLayout(5,2,10,10));
+
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE); // ✅ only close this window
+
+        add(new JLabel("Vehicle Name:"));
+        txtName = new JTextField();
+        add(txtName);
+
+        add(new JLabel("Vehicle Type:"));
+        txtType = new JTextField();
+        add(txtType);
+
+        add(new JLabel("Daily Rent:"));
+        txtRent = new JTextField();
+        add(txtRent);
+
+        add(new JLabel("Available:"));
+        chkAvailable = new JCheckBox();
+        chkAvailable.setSelected(true);
+        add(chkAvailable);
+
+        btnAdd = new JButton("Add Vehicle");
+        add(btnAdd);
+
+        btnAdd.addActionListener(e -> {
+            try(Connection con = DbConnection.getConnection()) {
+                PreparedStatement ps = con.prepareStatement(
+                    "INSERT INTO vehicless(vehicle_name, vehicle_type, daily_rent, availability) VALUES (?,?,?,?)");
+                ps.setString(1, txtName.getText());
+                ps.setString(2, txtType.getText());
+                ps.setDouble(3, Double.parseDouble(txtRent.getText()));
+                ps.setBoolean(4, chkAvailable.isSelected());
+                ps.executeUpdate();
+
+                JOptionPane.showMessageDialog(this,"✅ Vehicle added successfully!");
+
+                // reset fields
+                txtName.setText("");
+                txtType.setText("");
+                txtRent.setText("");
+                chkAvailable.setSelected(true);
+
+            } catch(Exception ex) {
+                ex.printStackTrace();
+                JOptionPane.showMessageDialog(this,"❌ Error: " + ex.getMessage());
+            }
+        });
+
+        setVisible(true);
+    }
+}
+
+
+ViewVehiclesPage.java
+
+package vrs;
+
+import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
+import java.awt.*;
+import java.sql.*;
+
+import vrs.DbConnection;
+
+public class ViewVehiclesPage extends JFrame {
+    JTable table;
+    DefaultTableModel model;
+    JButton btnRemove, btnToggleAvailability;
+
+    public ViewVehiclesPage() {
+        setTitle("View Vehicles");
+        setSize(600, 450);
+        setLayout(new BorderLayout());
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+
+        // Table setup
+        model = new DefaultTableModel();
+        model.setColumnIdentifiers(new String[]{"ID","Name","Type","Rent","Available"});
+        table = new JTable(model);
+        add(new JScrollPane(table), BorderLayout.CENTER);
+
+        // Buttons panel
+        JPanel panelButtons = new JPanel();
+        btnRemove = new JButton("Remove Selected Vehicle");
+        btnToggleAvailability = new JButton("Toggle Availability");
+        panelButtons.add(btnToggleAvailability);
+        panelButtons.add(btnRemove);
+        add(panelButtons, BorderLayout.SOUTH);
+
+        // Load vehicles
+        loadVehicles();
+
+        // Button actions
+        btnRemove.addActionListener(e -> removeVehicle());
+        btnToggleAvailability.addActionListener(e -> toggleAvailability());
+
+        setVisible(true);
+    }
+
+    private void loadVehicles() {
+        model.setRowCount(0); // clear table
+        try(Connection con = DbConnection.getConnection()) {
+            Statement st = con.createStatement();
+            ResultSet rs = st.executeQuery("SELECT * FROM vehicless");
+            while(rs.next()) {
+                model.addRow(new Object[]{
+                    rs.getInt("vehicle_id"),
+                    rs.getString("vehicle_name"),
+                    rs.getString("vehicle_type"),
+                    rs.getDouble("daily_rent"),
+                    rs.getBoolean("availability")
+                });
+            }
+        } catch(Exception e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Error loading vehicles: " + e.getMessage());
+        }
+    }
+
+    private void removeVehicle() {
+        int row = table.getSelectedRow();
+        if(row == -1) {
+            JOptionPane.showMessageDialog(this, "Please select a vehicle to remove.");
+            return;
+        }
+
+        int vehicleId = (int) model.getValueAt(row, 0);
+
+        int confirm = JOptionPane.showConfirmDialog(this,
+                "Are you sure you want to remove this vehicle?",
+                "Confirm Delete",
+                JOptionPane.YES_NO_OPTION);
+
+        if(confirm != JOptionPane.YES_OPTION) return;
+
+        try(Connection con = DbConnection.getConnection()) {
+            PreparedStatement ps = con.prepareStatement("DELETE FROM vehicless WHERE vehicle_id=?");
+            ps.setInt(1, vehicleId);
+            int deleted = ps.executeUpdate();
+
+            if(deleted > 0) {
+                model.removeRow(row); // remove from table
+                JOptionPane.showMessageDialog(this, "Vehicle removed successfully!");
+            } else {
+                JOptionPane.showMessageDialog(this, "Vehicle not found or could not be deleted.");
+            }
+        } catch(Exception e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Error removing vehicle: " + e.getMessage());
+        }
+    }
+
+    private void toggleAvailability() {
+        int row = table.getSelectedRow();
+        if(row == -1) {
+            JOptionPane.showMessageDialog(this, "Please select a vehicle to toggle availability.");
+            return;
+        }
+
+        int vehicleId = (int) model.getValueAt(row, 0);
+        boolean currentStatus = (boolean) model.getValueAt(row, 4); // current availability
+        boolean newStatus = !currentStatus;
+
+        try(Connection con = DbConnection.getConnection()) {
+            PreparedStatement ps = con.prepareStatement(
+                    "UPDATE vehicless SET availability=? WHERE vehicle_id=?"
+            );
+            ps.setBoolean(1, newStatus);
+            ps.setInt(2, vehicleId);
+            int updated = ps.executeUpdate();
+
+            if(updated > 0) {
+                model.setValueAt(newStatus, row, 4); // update table
+                JOptionPane.showMessageDialog(this, "Availability updated successfully!");
+            } else {
+                JOptionPane.showMessageDialog(this, "Failed to update availability.");
+            }
+        } catch(Exception e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Error updating availability: " + e.getMessage());
+        }
+    }
+}
+
+
+AddCustomerPage.java
+
+package vrs;
+import javax.swing.*;
+import java.awt.*;
+import java.sql.*;
+import vrs.DbConnection;
+
+public class AddCustomerPage extends JFrame {
+    JTextField txtName, txtPhone, txtEmail;
+    JButton btnAdd;
+
+    public AddCustomerPage() {
+        setTitle("Add Customer");
+        setSize(400,250);
+        setLayout(new GridLayout(4,2,10,10));
+
+        add(new JLabel("Name:")); txtName = new JTextField(); add(txtName);
+        add(new JLabel("Phone:")); txtPhone = new JTextField(); add(txtPhone);
+        add(new JLabel("Email:")); txtEmail = new JTextField(); add(txtEmail);
+        btnAdd = new JButton("Add Customer"); add(btnAdd);
+
+        btnAdd.addActionListener(e -> {
+            try(Connection con = DbConnection.getConnection()) {
+                PreparedStatement ps = con.prepareStatement(
+                    "INSERT INTO customerss(name, phone, email) VALUES (?,?,?)");
+                ps.setString(1, txtName.getText());
+                ps.setString(2, txtPhone.getText());
+                ps.setString(3, txtEmail.getText());
+                ps.executeUpdate();
+                JOptionPane.showMessageDialog(this,"Customer added successfully!");
+                txtName.setText(""); txtPhone.setText(""); txtEmail.setText("");
+            } catch(Exception ex) { ex.printStackTrace(); }
+        });
+
+        setVisible(true);
+    }
+}
+
+ViewCustomerPage.java
+package vrs;
+import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
+import java.sql.*;
+import vrs.DbConnection;
+
+public class ViewCustomerPage extends JFrame {
+    JTable table;
+    DefaultTableModel model;
+
+    public ViewCustomerPage() {
+        setTitle("View Customers");
+        setSize(600,400);
+
+        model = new DefaultTableModel();
+        model.setColumnIdentifiers(new String[]{"ID","Name","Phone","Email"});
+        table = new JTable(model);
+        add(new JScrollPane(table));
+
+        loadCustomers();
+        setVisible(true);
+    }
+
+    private void loadCustomers() {
+        model.setRowCount(0);
+        try(Connection con = DbConnection.getConnection()) {
+            Statement st = con.createStatement();
+            ResultSet rs = st.executeQuery("SELECT * FROM customerss");
+            while(rs.next()) {
+                model.addRow(new Object[]{
+                    rs.getInt("customer_id"),
+                    rs.getString("name"),
+                    rs.getString("phone"),
+                    rs.getString("email")
+                });
+            }
+        } catch(Exception e) { e.printStackTrace(); }
+    }
+}
+
+RentVehiclePage.java
+
+package vrs;
+
+import javax.swing.*;
+import java.awt.*;
+import java.sql.*;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import vrs.DbConnection;
+
+public class RentVehiclePage extends JFrame {
+    JComboBox<String> cbVehicle, cbCustomer;
+    JTextField txtRentDate, txtReturnDate;
+    JButton btnRent;
+
+    public RentVehiclePage() {
+        setTitle("Rent Vehicle");
+        setSize(400, 300);
+        setLayout(new GridLayout(5, 2, 10, 10));
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+
+        add(new JLabel("Select Vehicle:"));
+        cbVehicle = new JComboBox<>();
+        add(cbVehicle);
+
+        add(new JLabel("Select Customer:"));
+        cbCustomer = new JComboBox<>();
+        add(cbCustomer);
+
+        add(new JLabel("Rent Date (YYYY-MM-DD):"));
+        txtRentDate = new JTextField();
+        add(txtRentDate);
+
+        add(new JLabel("Return Date (YYYY-MM-DD):"));
+        txtReturnDate = new JTextField();
+        add(txtReturnDate);
+
+        btnRent = new JButton("Rent Vehicle");
+        add(btnRent);
+
+        loadVehicles();
+        loadCustomers();
+
+        btnRent.addActionListener(e -> rentVehicle());
+
+        setVisible(true);
+    }
+
+    private void rentVehicle() {
+        String vehicleName = (String) cbVehicle.getSelectedItem();
+        String customerName = (String) cbCustomer.getSelectedItem();
+        String rentDate = txtRentDate.getText().trim();
+        String returnDate = txtReturnDate.getText().trim();
+
+        if (vehicleName == null || customerName == null || rentDate.isEmpty() || returnDate.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Please fill all fields and select vehicle/customer.");
+            return;
+        }
+
+        if (!isValidDate(rentDate) || !isValidDate(returnDate)) {
+            JOptionPane.showMessageDialog(this, "Dates must be in YYYY-MM-DD format.");
+            return;
+        }
+
+        try (Connection con = DbConnection.getConnection()) {
+            PreparedStatement psV = con.prepareStatement(
+                    "SELECT vehicle_id FROM vehicless WHERE vehicle_name=? AND availability=1");
+            psV.setString(1, vehicleName);
+            ResultSet rsV = psV.executeQuery();
+            if (!rsV.next()) {
+                JOptionPane.showMessageDialog(this, "Selected vehicle is not available!");
+                return;
+            }
+            int vehicleId = rsV.getInt("vehicle_id");
+
+            PreparedStatement psC = con.prepareStatement(
+                    "SELECT customer_id FROM customerss WHERE name=?");
+            psC.setString(1, customerName);
+            ResultSet rsC = psC.executeQuery();
+            if (!rsC.next()) {
+                JOptionPane.showMessageDialog(this, "Customer not found!");
+                return;
+            }
+            int customerId = rsC.getInt("customer_id");
+
+            PreparedStatement psInsert = con.prepareStatement(
+                    "INSERT INTO rentalss(vehicle_id, customer_id, rent_date, return_date) VALUES (?,?,?,?)");
+            psInsert.setInt(1, vehicleId);
+            psInsert.setInt(2, customerId);
+            psInsert.setString(3, rentDate);
+            psInsert.setString(4, returnDate);
+            psInsert.executeUpdate();
+
+            PreparedStatement psUpdate = con.prepareStatement(
+                    "UPDATE vehicless SET availability=0 WHERE vehicle_id=?");
+            psUpdate.setInt(1, vehicleId);
+            psUpdate.executeUpdate();
+
+            JOptionPane.showMessageDialog(this, "Vehicle rented successfully!");
+            cbVehicle.removeAllItems();
+            loadVehicles();
+
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage());
+            ex.printStackTrace();
+        }
+    }
+
+    private boolean isValidDate(String date) {
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+        sdf.setLenient(false);
+        try {
+            sdf.parse(date);
+            return true;
+        } catch (ParseException e) {
+            return false;
+        }
+    }
+
+    private void loadVehicles() {
+        try (Connection con = DbConnection.getConnection()) {
+            Statement st = con.createStatement();
+            ResultSet rs = st.executeQuery("SELECT vehicle_name FROM vehicless WHERE availability=1");
+            while (rs.next()) {
+                cbVehicle.addItem(rs.getString("vehicle_name"));
+            }
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Error loading vehicles: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private void loadCustomers() {
+        try (Connection con = DbConnection.getConnection()) {
+            Statement st = con.createStatement();
+            ResultSet rs = st.executeQuery("SELECT name FROM customerss");
+            while (rs.next()) {
+                cbCustomer.addItem(rs.getString("name"));
+            }
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Error loading customers: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+}
+
+ReturnVehiclePage.java
+
+package vrs;
+
+import javax.swing.*;
+import java.awt.*;
+import java.sql.*;
+import vrs.DbConnection;
+
+public class ReturnVehiclePage extends JFrame {
+    JComboBox<String> cbRental;
+    JButton btnReturn;
+
+    public ReturnVehiclePage() {
+        setTitle("Return Vehicle");
+        setSize(400, 200);
+        setLayout(new GridLayout(3, 1, 10, 10));
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+
+        add(new JLabel("Select Rental:"));
+        cbRental = new JComboBox<>();
+        add(cbRental);
+
+        btnReturn = new JButton("Return Vehicle");
+        add(btnReturn);
+
+        loadRentals();
+
+        btnReturn.addActionListener(e -> returnVehicle());
+
+        setVisible(true);
+    }
+
+    private void loadRentals() {
+        cbRental.removeAllItems();
+        try (Connection con = DbConnection.getConnection();
+             PreparedStatement ps = con.prepareStatement(
+                     "SELECT r.rental_id, v.vehicle_name, c.name " +
+                     "FROM rentalss r " +
+                     "JOIN vehicless v ON r.vehicle_id = v.vehicle_id " +
+                     "JOIN customerss c ON r.customer_id = c.customer_id " +
+                     "WHERE r.return_date IS NULL"
+             );
+             ResultSet rs = ps.executeQuery()) {
+
+            while (rs.next()) {
+                int id = rs.getInt("rental_id");
+                String vehicle = rs.getString("vehicle_name");
+                String customer = rs.getString("name");
+                String info = id + ": " + vehicle + " (" + customer + ")";
+                cbRental.addItem(info);
+            }
+
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Error loading rentals: " + ex.getMessage());
+        }
+    }
+
+    private void returnVehicle() {
+        String rentalInfo = (String) cbRental.getSelectedItem();
+        if (rentalInfo == null) {
+            JOptionPane.showMessageDialog(this, "Please select a rental to return.");
+            return;
+        }
+
+        int rentalId = Integer.parseInt(rentalInfo.split(":")[0].trim());
+
+        Connection con = null;
+        try {
+            con = DbConnection.getConnection();
+            con.setAutoCommit(false);
+
+            int vehicleId = -1;
+            try (PreparedStatement ps = con.prepareStatement(
+                    "SELECT vehicle_id FROM rentalss WHERE rental_id = ? AND return_date IS NULL")) {
+                ps.setInt(1, rentalId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (!rs.next()) {
+                        JOptionPane.showMessageDialog(this, "Rental already returned or not found.");
+                        con.rollback();
+                        con.setAutoCommit(true);
+                        return;
+                    }
+                    vehicleId = rs.getInt("vehicle_id");
+                }
+            }
+
+            try (PreparedStatement ps = con.prepareStatement(
+                    "UPDATE vehicless SET availability = 1 WHERE vehicle_id = ?")) {
+                ps.setInt(1, vehicleId);
+                ps.executeUpdate();
+            }
+
+            try (PreparedStatement ps = con.prepareStatement(
+                    "UPDATE rentalss SET return_date = CURDATE() WHERE rental_id = ?")) {
+                ps.setInt(1, rentalId);
+                ps.executeUpdate();
+            }
+
+            con.commit();
+            JOptionPane.showMessageDialog(this, "Vehicle returned successfully!");
+            cbRental.removeItem(rentalInfo);
+
+        } catch (Exception ex) {
+            try {
+                if (con != null) con.rollback();
+            } catch (Exception ignore) {}
+            JOptionPane.showMessageDialog(this, "Error returning vehicle: " + ex.getMessage());
+        } finally {
+            try {
+                if (con != null) con.setAutoCommit(true);
+                if (con != null) con.close();
+            } catch (Exception ignore) {}
+        }
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(ReturnVehiclePage::new);
+    }
+}
+
+PaymentsPage.java
+
+package vrs;
+
+import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
+import java.awt.*;
+import java.sql.*;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+
+public class PaymentsPage extends JFrame {
+    JTable tblRentals;
+    DefaultTableModel model;
+    JButton btnPay;
+
+    public PaymentsPage() {
+        setTitle("Payments");
+        setSize(700, 400);
+        setLayout(new BorderLayout());
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+
+        // Create table model
+        model = new DefaultTableModel(new String[]{"Rental ID", "Vehicle", "Customer", "Amount", "Status"}, 0) {
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+
+        tblRentals = new JTable(model);
+        add(new JScrollPane(tblRentals), BorderLayout.CENTER);
+
+        // Pay button
+        btnPay = new JButton("Pay");
+        add(btnPay, BorderLayout.SOUTH);
+
+        // Load data
+        loadRentals();
+
+        // Button action
+        btnPay.addActionListener(e -> pay());
+
+        setVisible(true);
+    }
+
+    private void loadRentals() {
+        model.setRowCount(0); // clear table
+        try (Connection con = DbConnection.getConnection()) {
+            String query = """
+                    SELECT r.rental_id, v.vehicle_name, c.name, v.daily_rent, 
+                           r.rent_date, r.return_date, 
+                           IF(p.payment_id IS NULL, 'Pending', 'Paid') AS status
+                    FROM rentalss r
+                    JOIN vehicless v ON r.vehicle_id = v.vehicle_id
+                    JOIN customerss c ON r.customer_id = c.customer_id
+                    LEFT JOIN paymentss p ON r.rental_id = p.rental_id
+                    """;
+
+            Statement st = con.createStatement();
+            ResultSet rs = st.executeQuery(query);
+
+            while (rs.next()) {
+                int rentalId = rs.getInt("rental_id");
+                String vehicle = rs.getString("vehicle_name");
+                String customer = rs.getString("name");
+                double dailyRent = rs.getDouble("daily_rent");
+                String status = rs.getString("status");
+
+                java.sql.Date sqlRentDate = rs.getDate("rent_date");
+                java.sql.Date sqlReturnDate = rs.getDate("return_date");
+
+                if (sqlRentDate == null) continue;
+
+                LocalDate rentDate = sqlRentDate.toLocalDate();
+                LocalDate returnDate = (sqlReturnDate != null) ? sqlReturnDate.toLocalDate() : LocalDate.now();
+
+                long days = ChronoUnit.DAYS.between(rentDate, returnDate);
+                if (days <= 0) days = 1;
+
+                double amount = dailyRent * days;
+
+                model.addRow(new Object[]{rentalId, vehicle, customer, amount, status});
+            }
+
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Error loading rentals: " + e.getMessage());
+        }
+    }
+
+    private void pay() {
+        int row = tblRentals.getSelectedRow();
+        if (row == -1) {
+            JOptionPane.showMessageDialog(this, "Please select a rental to pay.");
+            return;
+        }
+
+        String status = (String) model.getValueAt(row, 4);
+        if ("Paid".equalsIgnoreCase(status)) {
+            JOptionPane.showMessageDialog(this, "This rental is already paid.");
+            return;
+        }
+
+        int rentalId = (int) model.getValueAt(row, 0);
+        double amount = (double) model.getValueAt(row, 3);
+
+        try (Connection con = DbConnection.getConnection()) {
+            PreparedStatement ps = con.prepareStatement(
+                    "INSERT INTO paymentss (rental_id, amount, payment_date) VALUES (?, ?, CURDATE())"
+            );
+            ps.setInt(1, rentalId);
+            ps.setDouble(2, amount);
+            ps.executeUpdate();
+
+            PreparedStatement psDelete = con.prepareStatement(
+                    "DELETE FROM rentalss WHERE rental_id=?"
+            );
+            psDelete.setInt(1, rentalId);
+            psDelete.executeUpdate();
+
+            model.removeRow(row);
+            JOptionPane.showMessageDialog(this, "Payment recorded and rental removed successfully!");
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Error while saving payment: " + ex.getMessage());
+        }
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(PaymentsPage::new);
+    }
+}
+
+
+MySQL Workbench Connection Code -:
+
+-- ✅ Ensure vehicless table exists
+CREATE TABLE IF NOT EXISTS vehicless (
+    vehicle_id INT AUTO_INCREMENT PRIMARY KEY,
+    vehicle_name VARCHAR(50),
+    vehicle_type VARCHAR(30),
+    daily_rent DECIMAL(10,2),
+    availability BOOLEAN DEFAULT 1
+);
+
+-- ✅ Ensure customerss table exists
+CREATE TABLE IF NOT EXISTS customerss (
+    customer_id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(50),
+    phone VARCHAR(20),
+    email VARCHAR(50)
+);
+
+-- ✅ Ensure rentalss table exists
+CREATE TABLE IF NOT EXISTS rentalss (
+    rental_id INT AUTO_INCREMENT PRIMARY KEY,
+    vehicle_id INT,
+    customer_id INT,
+    rent_date DATE,
+    return_date DATE NULL,
+    FOREIGN KEY(vehicle_id) REFERENCES vehicless(vehicle_id),
+    FOREIGN KEY(customer_id) REFERENCES customerss(customer_id)
+);
+
+-- ✅ Ensure paymentss table exists
+CREATE TABLE IF NOT EXISTS paymentss (
+    payment_id INT AUTO_INCREMENT PRIMARY KEY,
+    rental_id INT,
+    amount DECIMAL(10,2),
+    payment_date DATE,
+    FOREIGN KEY(rental_id) REFERENCES rentalss(rental_id)
+);
+
+-- ✅ Fix foreign key on paymentss (with ON DELETE CASCADE)
+ALTER TABLE paymentss DROP FOREIGN KEY IF EXISTS paymentss_ibfk_1;
+ALTER TABLE paymentss
+  ADD CONSTRAINT paymentss_ibfk_1
+  FOREIGN KEY (rental_id) REFERENCES rentalss(rental_id) ON DELETE CASCADE;
+
+-- ✅ Make sure return_date allows NULL (needed for return process)
+ALTER TABLE rentalss MODIFY COLUMN return_date DATE NULL;
+
+-- ✅ Clean invalid default dates
+UPDATE rentalss SET return_date = NULL WHERE return_date = '0000-00-00';
+
+-- ✅ Insert a sample active rental (for testing)
+INSERT INTO rentalss (vehicle_id, customer_id, rent_date, return_date)
+SELECT 1, 1, CURDATE(), NULL
+WHERE NOT EXISTS (SELECT 1 FROM rentalss WHERE vehicle_id=1 AND customer_id=1 AND return_date IS NULL);
